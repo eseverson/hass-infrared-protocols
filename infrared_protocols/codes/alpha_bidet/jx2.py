@@ -1,6 +1,6 @@
 """Command codes for the Alpha Bidet JX-2 washlet (Kaseikyo protocol)."""
 
-from enum import Enum
+from enum import Enum, unique
 
 from ...commands import Command
 from ...commands.kaseikyo import KaseikyoCommand
@@ -18,16 +18,24 @@ LEVEL_BASE = 0x20
 MAX_LEVEL = 3
 
 
+def error_correction(data: bytes) -> bytes:
+    """Calculate the checksum byte for Alpha Bidet JX-2 commands."""
+    # The remote sums the payload nibbles without the parity merged into flags.
+    payload = bytes([data[2] & 0xF0]) + data[3:]
+    return bytes([sum((byte >> 4) + (byte & 0x0F) for byte in payload) & 0xFF])
+
+
 def _to_command(payload: bytes) -> Command:
     """Build the two-frame Kaseikyo command for a payload."""
     return KaseikyoCommand(
         address=ALPHA_BIDET_ADDRESS,
         data=[payload] * FRAME_COUNT,
-        error_correction=AlphaBidetJX2Code.error_correction,
+        error_correction=error_correction,
         modulation=ALPHA_BIDET_MODULATION,
     )
 
 
+@unique
 class AlphaBidetJX2Code(Enum):
     """Alpha Bidet JX-2 IR command codes, as the payload bytes before the checksum."""
 
@@ -45,26 +53,20 @@ class AlphaBidetJX2Code(Enum):
     NOZZLE_UP = (0x00, 0xD0, 0x18)
     NOZZLE_DOWN = (0x00, 0xD0, 0x08)
 
-    @staticmethod
-    def error_correction(data: bytes) -> bytes:
-        """Calculate the checksum byte for Alpha Bidet JX-2 commands."""
-        # The remote sums the payload nibbles without the parity merged into flags.
-        payload = bytes([data[2] & 0xF0]) + data[3:]
-        return bytes([sum((byte >> 4) + (byte & 0x0F) for byte in payload) & 0xFF])
-
     def to_command(self) -> Command:
         """Build the Kaseikyo command for this Alpha Bidet JX-2 code."""
         return _to_command(bytes(self.value))
 
 
-class AlphaBidetJX2Setting(Enum):
-    """Alpha Bidet JX-2 settings, as the payload bytes before the level byte."""
+@unique
+class AlphaBidetJX2LevelCode(Enum):
+    """Alpha Bidet JX-2 level codes, as the payload bytes before the level byte."""
 
     WATER_TEMP = (0x10, 0xD0, 0x19)
     SEAT_TEMP = (0x10, 0xD0, 0x09)
 
     def to_command(self, level: int) -> Command:
-        """Build the Kaseikyo command setting this setting to an absolute level."""
+        """Build the Kaseikyo command setting this code to an absolute level."""
         if not 0 <= level <= MAX_LEVEL:
             raise ValueError(f"level must be between 0 and {MAX_LEVEL}, got {level}")
 

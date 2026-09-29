@@ -6,7 +6,7 @@ from infrared_protocols.codes.alpha_bidet.jx2 import (
     ALPHA_BIDET_ADDRESS,
     MAX_LEVEL,
     AlphaBidetJX2Code,
-    AlphaBidetJX2Setting,
+    AlphaBidetJX2LevelCode,
 )
 from infrared_protocols.commands import Command
 from infrared_protocols.commands.kaseikyo import KaseikyoCommand
@@ -25,15 +25,15 @@ CAPTURED_CODES = {
     AlphaBidetJX2Code.NOZZLE_UP: "00 d0 18 16",
     AlphaBidetJX2Code.NOZZLE_DOWN: "00 d0 08 15",
 }
-CAPTURED_SETTINGS = {
-    (AlphaBidetJX2Setting.SEAT_TEMP, 0): "10 d0 09 20 19",
-    (AlphaBidetJX2Setting.SEAT_TEMP, 1): "10 d0 09 21 1a",
-    (AlphaBidetJX2Setting.SEAT_TEMP, 2): "10 d0 09 22 1b",
-    (AlphaBidetJX2Setting.SEAT_TEMP, 3): "10 d0 09 23 1c",
-    (AlphaBidetJX2Setting.WATER_TEMP, 0): "10 d0 19 20 1a",
-    (AlphaBidetJX2Setting.WATER_TEMP, 1): "10 d0 19 21 1b",
-    (AlphaBidetJX2Setting.WATER_TEMP, 2): "10 d0 19 22 1c",
-    (AlphaBidetJX2Setting.WATER_TEMP, 3): "10 d0 19 23 1d",
+CAPTURED_LEVEL_CODES = {
+    (AlphaBidetJX2LevelCode.SEAT_TEMP, 0): "10 d0 09 20 19",
+    (AlphaBidetJX2LevelCode.SEAT_TEMP, 1): "10 d0 09 21 1a",
+    (AlphaBidetJX2LevelCode.SEAT_TEMP, 2): "10 d0 09 22 1b",
+    (AlphaBidetJX2LevelCode.SEAT_TEMP, 3): "10 d0 09 23 1c",
+    (AlphaBidetJX2LevelCode.WATER_TEMP, 0): "10 d0 19 20 1a",
+    (AlphaBidetJX2LevelCode.WATER_TEMP, 1): "10 d0 19 21 1b",
+    (AlphaBidetJX2LevelCode.WATER_TEMP, 2): "10 d0 19 22 1c",
+    (AlphaBidetJX2LevelCode.WATER_TEMP, 3): "10 d0 19 23 1d",
 }
 
 
@@ -49,12 +49,6 @@ def captured_frames(command: Command) -> list[str]:
         checksum = command.error_correction(address + frame)
         frames.append((frame + checksum).hex(" "))
     return frames
-
-
-def test_alpha_bidet_jx2_codes_are_unique() -> None:
-    """Every code must be distinct, since duplicates become silent aliases."""
-    members = AlphaBidetJX2Code.__members__
-    assert len(members) == len(set(members.values()))
 
 
 def test_alpha_bidet_jx2_code_get_raw_timings_stop() -> None:
@@ -107,29 +101,29 @@ def test_code_sends_the_captured_payload_twice(
 def test_every_code_and_level_is_covered_by_a_capture() -> None:
     """A code or level added without a capture would ship an unverified payload."""
     assert set(CAPTURED_CODES) == set(AlphaBidetJX2Code)
-    assert set(CAPTURED_SETTINGS) == {
-        (setting, level)
-        for setting in AlphaBidetJX2Setting
+    assert set(CAPTURED_LEVEL_CODES) == {
+        (code, level)
+        for code in AlphaBidetJX2LevelCode
         for level in range(MAX_LEVEL + 1)
     }
 
 
 @pytest.mark.parametrize(
-    ("setting", "level", "captured"),
+    ("code", "level", "captured"),
     [
-        pytest.param(setting, level, captured, id=f"{setting.name.lower()}_{level}")
-        for (setting, level), captured in CAPTURED_SETTINGS.items()
+        pytest.param(code, level, captured, id=f"{code.name.lower()}_{level}")
+        for (code, level), captured in CAPTURED_LEVEL_CODES.items()
     ],
 )
-def test_setting_sends_the_captured_level_payload(
-    setting: AlphaBidetJX2Setting, level: int, captured: str
+def test_level_code_sends_the_captured_level_payload(
+    code: AlphaBidetJX2LevelCode, level: int, captured: str
 ) -> None:
     """Levels are absolute: the value byte says which one, not which direction."""
-    assert captured_frames(setting.to_command(level)) == [captured, captured]
+    assert captured_frames(code.to_command(level)) == [captured, captured]
 
 
 @pytest.mark.parametrize("level", [-1, 4, 16], ids=["negative", "above_max", "nibble"])
-def test_setting_rejects_a_level_outside_the_range(level: int) -> None:
+def test_level_code_rejects_a_level_outside_the_range(level: int) -> None:
     """A level wider than the low nibble would corrupt the value byte silently."""
     with pytest.raises(ValueError, match="level"):
-        AlphaBidetJX2Setting.WATER_TEMP.to_command(level)
+        AlphaBidetJX2LevelCode.WATER_TEMP.to_command(level)
